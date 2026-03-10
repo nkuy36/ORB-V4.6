@@ -9,7 +9,7 @@ grp_or = "1. Opening Range & Custom Sessions"
 crMode = input.string("Presets", "Selection Mode", options=["Presets", "Manual"], group=grp_or)
 crSeshPreset = input.string("0930-0935", "Preset Range", options=["0930-0931", "0930-0932", "0930-0933", "0930-0934", "0930-0935", "0930-0940", "0930-0945"], group=grp_or)
 crSeshManual = input.session("0930-0945", "Manual Session String", group=grp_or)
-tz = input.string("UTC-5", "Timezone", group=grp_or, options=["UTC-10", "UTC-5", "UTC+0"])
+tz = input.string("America/New_York", "Timezone", group=grp_or, options=["Pacific/Honolulu", "America/New_York", "UTC"])
 monitorTF = input.string("5", "Status Monitor Timeframe", options=["1", "5", "15", "30", "60"], group=grp_or)
 orBoxMode = input.string("Extended", "OR Box Display", options=["Session Only", "Extended"], group=grp_or, tooltip="Session Only = box ends when OR session ends. Extended = box extends to end of trading day.")
 orBoxExtBars = input.int(200, "Extended Box Bars (if Extended)", minval=10, maxval=500, group=grp_or, tooltip="How many bars to extend the OR box to the right. 200 ≈ full 5m trading day.")
