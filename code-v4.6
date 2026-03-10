@@ -1,0 +1,561 @@
+// © Nkhmer123 / Integrated Martin Luk Institutional Cockpit - V4.9 (Strict Logic Restoration)
+//@version=6
+indicator("LUK ORB V4.6", shorttitle="ORB V4.6", overlay=true, max_lines_count=500, max_labels_count=500, max_boxes_count=500)
+
+//---------------------------------------------------------------------------------------------------------------------}
+// 1. INPUTS & CONFIGURATION
+//---------------------------------------------------------------------------------------------------------------------{
+grp_or = "1. Opening Range & Custom Sessions"
+crMode = input.string("Presets", "Selection Mode", options=["Presets", "Manual"], group=grp_or)
+crSeshPreset = input.string("0930-0935", "Preset Range", options=["0930-0931", "0930-0932", "0930-0933", "0930-0934", "0930-0935", "0930-0940", "0930-0945"], group=grp_or)
+crSeshManual = input.session("0930-0945", "Manual Session String", group=grp_or)
+tz = input.string("UTC-5", "Timezone", group=grp_or, options=["UTC-10", "UTC-5", "UTC+0"])
+monitorTF = input.string("5", "Status Monitor Timeframe", options=["1", "5", "15", "30", "60"], group=grp_or)
+
+grp_luk = "2. LUK MOMENTUM & BREADTH (DAILY)"
+mktIndex = input.symbol("AMEX:SPY", "Market Index Ticker", group=grp_luk)
+trendCheckTF = input.string("240", "Trend Sync Check TF", options=["1", "5", "15", "30", "60", "240", "D"], group=grp_luk)
+ema9On  = input.bool(false, "Show MA 2 (9 EMA)", group=grp_luk, inline="e9")
+ema9Len = input.int(9, "", group=grp_luk, inline="e9")
+ema21On = input.bool(false, "Show MA 3 (21 EMA)", group=grp_luk, inline="e21")
+ema21Len = input.int(21, "", group=grp_luk, inline="e21")
+ema50On = input.bool(false, "Show MA 4 (50 EMA)", group=grp_luk, inline="e50")
+ema50Len = input.int(50, "", group=grp_luk, inline="e50")
+equityHighs = input.bool(true, "Mode: Equity Highs (Off = Drawdown Mode)", group=grp_luk)
+
+grp_breadth = "3. SECTOR BREADTH (18 ETFs)"
+// Growth & Tech
+sym1  = input.symbol("SMH",  "1. Semis", group=grp_breadth)
+sym2  = input.symbol("IGV",  "2. Software", group=grp_breadth)
+sym3  = input.symbol("XLK",  "3. Tech", group=grp_breadth)
+sym4  = input.symbol("XLC",  "4. Comm Services", group=grp_breadth)
+sym5  = input.symbol("IBIT", "5. Bitcoin", group=grp_breadth)
+sym6  = input.symbol("XBI",  "6. Biotech", group=grp_breadth)
+
+// Cyclical & Industrial
+sym7  = input.symbol("XLF",  "7. Financials", group=grp_breadth)
+sym8  = input.symbol("XLE",  "8. Energy", group=grp_breadth)
+sym9  = input.symbol("XLI",  "9. Industrials", group=grp_breadth)
+sym10 = input.symbol("ITA",  "10. Defense", group=grp_breadth)
+sym11 = input.symbol("JETS", "11. Airlines", group=grp_breadth)
+sym12 = input.symbol("XRT",  "12. Retail", group=grp_breadth) // Replaced UUP
+
+// Commodities & Defensive
+sym13 = input.symbol("GLD",  "13. Gold", group=grp_breadth)
+sym14 = input.symbol("COPX", "14. Copper", group=grp_breadth)
+sym15 = input.symbol("URA",  "15. Uranium", group=grp_breadth)
+sym16 = input.symbol("XLV",  "16. Healthcare", group=grp_breadth)
+sym17 = input.symbol("XLU",  "17. Utilities", group=grp_breadth)
+sym18 = input.symbol("IWM",  "18. Small Caps", group=grp_breadth) // Replaced TLT
+
+grp_sl = "4. RISK & STOP LOSS (LUK CALCULATOR)"
+// --- LUK PLANNER INPUTS ---
+manEntryInput = input.float(0.0, "PLANNER: Manual Entry (0 = Auto)", group=grp_sl)
+manStopInput  = input.float(0.0, "PLANNER: Manual Stop (0 = Auto)", group=grp_sl)
+// ------------------------------
+maxRiskPct = input.float(5.0, "Hard Risk Cap (%)", minval=1.0, group=grp_sl)
+adrFactor = input.float(0.5, "ADR Stop Factor", minval=0.1, step=0.1, group=grp_sl)
+minDollarVol = input.float(100.0, "Min Dollar Vol (M)", minval=1.0, group=grp_sl)
+rvolThreshold = input.float(1.5, "High RVOL Threshold", minval=1.0, step=0.1, group=grp_sl)
+// --- ACCOUNT & SIZING INPUTS ---
+accountSize = input.float(10000.0, "Account Balance ($)", minval=1.0, group=grp_sl)
+
+grp_tp = "5. TARGET PROFIT SETTINGS"
+tp1_on = input.bool(true, "TP 1", inline="tp1", group=grp_tp)
+tp1_v  = input.float(1.0, "R", inline="tp1", group=grp_tp)
+tp2_on = input.bool(true, "TP 2", inline="tp2", group=grp_tp)
+tp2_v  = input.float(1.5, "R", inline="tp2", group=grp_tp)
+tp3_on = input.bool(true, "TP 3", inline="tp3", group=grp_tp)
+tp3_v  = input.float(2.0, "R", inline="tp3", group=grp_tp)
+tp4_on = input.bool(false, "TP 4", inline="tp4", group=grp_tp)
+tp4_v  = input.float(2.5, "R", inline="tp4", group=grp_tp)
+tp5_on = input.bool(true, "TP 5", inline="tp5", group=grp_tp)
+tp5_v  = input.float(3.0, "R", inline="tp5", group=grp_tp)
+tp6_on = input.bool(false, "TP 6", inline="tp6", group=grp_tp)
+tp6_v  = input.float(3.5, "R", inline="tp6", group=grp_tp)
+tp7_on = input.bool(false, "TP 7", inline="tp7", group=grp_tp)
+tp7_v  = input.float(4.0, "R", inline="tp7", group=grp_tp)
+tp8_on = input.bool(true, "TP 8", inline="tp8", group=grp_tp)
+tp8_v  = input.float(5.0, "R", inline="tp8", group=grp_tp)
+tp9_on = input.bool(false, "TP 9", inline="tp9", group=grp_tp)
+tp9_v  = input.float(7.0, "R", inline="tp9", group=grp_tp)
+
+grp_dash = "6. DASHBOARD SETTINGS"
+showDash = input.bool(true, "Show Dashboard", group=grp_dash)
+dashTheme = input.string("Dark", "Theme", options=["Light", "Dark"], group=grp_dash)
+dashOrient = input.string("Vertical", "Layout Orientation", options=["Vertical", "Horizontal"], group=grp_dash)
+dashPos = input.string("Top Right", "Location", options=["Top Left", "Top Right", "Bottom Left", "Bottom Right", "Top Center", "Bottom Center", "Middle Left", "Middle Right"], group=grp_dash)
+txtSizeInput = input.string("Small", "Text Size", options=["Tiny","Small","Normal","Large"], group=grp_dash)
+
+grp_style = "7. VISUAL STYLE & TARGETS"
+tDispType = input.string("Adaptive", "Target Display", options=["Adaptive","Extended"], group=grp_style)
+showTPLabels = input.bool(true, "Show Labels on Chart Lines", group=grp_style)
+labelSizeInput = input.string("Small", "Label Text Size", options=["Tiny","Small","Normal","Large"], group=grp_style)
+orColor = input.color(#787b86, "OR Levels Color", group=grp_style)
+orFillColor = input.color(color.new(color.gray, 60), "OR Default Highlight", group=grp_style)
+bullFill = input.color(color.new(#089981, 60), "Bullish Fill Color", group=grp_style)
+bearFill = input.color(color.new(#f23645, 60), "Bearish Fill Color", group=grp_style)
+
+grp_luk_size = "8. LUK ALLOCATION ENGINE"
+// Updated options to match Martin Luk's 3-Tier System
+lukTier      = input.string("Standard (Large Cap)", "Asset Class", options=["Standard (Large Cap)", "Speculative (Small Cap)", "Slow Mover (ETF/Metal)"], group=grp_luk_size)
+marketState  = input.string("Equity Highs", "Account State", options=["Equity Highs", "Drawdown/Testing"], group=grp_luk_size)
+// Updated default risk to 0.5% (Martin Luk Standard)
+riskPerTrade = input.float(0.5, "Risk Per Trade (%)", minval=0.1, maxval=5.0, step=0.1, group=grp_luk_size, tooltip="Martin Luk uses 0.5% base risk.")
+
+// Matching Stage Analysis Colors
+ma2Col = color.blue 
+ma3Col = color.yellow
+ma4Col = color.orange
+
+// --- Target Type Definition ---
+type targetLine
+    line ln
+    label lb
+
+// --- Helpers ---
+get_size(_s) => _s == "Tiny" ? size.tiny : _s == "Small" ? size.small : _s == "Normal" ? size.normal : size.large
+
+f_cell(_t, _orient, _r, _l, _v, _vc, _bg, _theme, _size) =>
+    c1 = _orient == "Vertical" ? 0 : _r
+    r1 = _orient == "Vertical" ? _r : 0
+    c2 = _orient == "Vertical" ? 1 : _r
+    r2 = _orient == "Vertical" ? _r : 1
+    f_tx = _theme == "Dark" ? color.white : color.black
+    table.cell(_t, c1, r1, _l, text_color=f_tx, text_size=_size)
+    table.cell(_t, c2, r2, _v, text_color=_vc, bgcolor=_bg, text_size=_size)
+
+//---------------------------------------------------------------------------------------------------------------------}
+// 2. TIMEFRAME-AGNOSTIC DATA
+//---------------------------------------------------------------------------------------------------------------------{
+// --- PART A: CORE SOS MARKET CONTEXT (CHOP & TREND) ---
+// 1. Chop Function (From CORE SOS)
+f_chopIndex(_p) =>
+    _atrSum = math.sum(ta.atr(1), _p)
+    _hiMax  = ta.highest(high, _p)
+    _loMin  = ta.lowest(low, _p)
+    _denom  = _hiMax - _loMin
+    _denom := _denom == 0 ? 1 : _denom
+    100 * math.log10(_atrSum / _denom) / math.log10(_p)
+
+// 2. Fetch Market Data (SPY Price, SMA 200, Chop Index)
+// Note: We use 14 for Chop Period as per CORE SOS defaults
+[idxClose, idxSMA200, idxChopVal] = request.security(mktIndex, "D", [close, ta.sma(close, 200), f_chopIndex(14)])
+
+// 3. Determine Context State (The "Road Conditions")
+string mktState = "N/A"
+color mktColor  = color.gray
+
+// Thresholds from CORE SOS
+float chopChaos = 61.8
+float chopTrans = 50.0
+float chopTrend = 38.2
+
+if idxClose < idxSMA200
+    mktState := "IDX: BEAR (CASH)"
+    mktColor := color.red
+else
+    if idxChopVal > chopChaos
+        mktState := "IDX: CHAOS (TRAPS)"
+        mktColor := color.orange
+    else if idxChopVal > chopTrans
+        mktState := "IDX: TRANSITION"
+        mktColor := color.yellow
+    else
+        mktState := "IDX: SUPER TREND"
+        mktColor := color.green
+
+// --- PART B: LUK LEADER BREADTH (The "Engine Power") ---
+// Using your existing Leader inputs (sym1 - sym10)
+f_isLeading(_s, _e9, _e21, _e50) =>
+    [c, e9, e21, e50] = request.security(_s, "D", [close, ta.ema(close, _e9), ta.ema(close, _e21), ta.ema(close, _e50)], gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_on)
+    c > e9 and e9 > e21 and e21 > e50 ? 1 : 0
+
+int leaderCount = 0
+leaderCount += f_isLeading(sym1,  ema9Len, ema21Len, ema50Len)
+leaderCount += f_isLeading(sym2,  ema9Len, ema21Len, ema50Len)
+leaderCount += f_isLeading(sym3,  ema9Len, ema21Len, ema50Len)
+leaderCount += f_isLeading(sym4,  ema9Len, ema21Len, ema50Len)
+leaderCount += f_isLeading(sym5,  ema9Len, ema21Len, ema50Len)
+leaderCount += f_isLeading(sym6,  ema9Len, ema21Len, ema50Len)
+leaderCount += f_isLeading(sym7,  ema9Len, ema21Len, ema50Len)
+leaderCount += f_isLeading(sym8,  ema9Len, ema21Len, ema50Len)
+leaderCount += f_isLeading(sym9,  ema9Len, ema21Len, ema50Len)
+leaderCount += f_isLeading(sym10, ema9Len, ema21Len, ema50Len)
+leaderCount += f_isLeading(sym11, ema9Len, ema21Len, ema50Len)
+leaderCount += f_isLeading(sym12, ema9Len, ema21Len, ema50Len)
+leaderCount += f_isLeading(sym13, ema9Len, ema21Len, ema50Len)
+leaderCount += f_isLeading(sym14, ema9Len, ema21Len, ema50Len)
+leaderCount += f_isLeading(sym15, ema9Len, ema21Len, ema50Len)
+leaderCount += f_isLeading(sym16, ema9Len, ema21Len, ema50Len)
+leaderCount += f_isLeading(sym17, ema9Len, ema21Len, ema50Len)
+leaderCount += f_isLeading(sym18, ema9Len, ema21Len, ema50Len)
+
+// --- PART C: ACTION PLAN (Hybrid: Chop Context + Sector Breadth) ---
+string actionText = "WAIT"
+color actionColor = color.gray
+
+// 1. Safety First: Check SOS Market Context (Chop/Trend)
+if mktState == "IDX: BEAR (CASH)"
+    actionText  := "CASH / SHORTS"
+    actionColor := color.red
+else if mktState == "IDX: CHAOS (TRAPS)"
+    actionText  := "TRAPS ONLY / SMALL" 
+    actionColor := color.orange
+else
+    // 2. Engine Power: If Context is Safe, check Sector Breadth
+    // Adjusted thresholds for 18 ETFs:
+    // Full Size: > 12 (approx 66%) -> Strong Bull
+    // Selective: > 6  (approx 33%) -> Mixed Market
+    if leaderCount >= 12
+        actionText  := "FULL SIZE ENTRY"
+        actionColor := color.green
+    else if leaderCount >= 6
+        actionText  := "SELECTIVE / HALF"
+        actionColor := color.yellow
+    else
+        actionText  := "CAUTION / WEAK"
+        actionColor := color.orange
+
+// --- Chart Data & Volume Logic (Preserved from V4.4) ---
+[dClose, dHigh, dLow, dOpen, dPrevHigh, dPrevLow, dPrevClose, dE9, dE21, dE50, dADR, dAvgVol, dDollarVolRaw] = request.security(syminfo.tickerid, "D", [close, high, low, open, high[1], low[1], close[1], ta.ema(close, ema9Len), ta.ema(close, ema21Len), ta.ema(close, ema50Len), ta.sma(high - low, 20), ta.sma(volume, 20), ta.sma(close * volume, 20)], gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_on)
+
+// --- VOLUME PACE LOGIC ---
+tOpen = timestamp(year(time), month(time), dayofmonth(time), 09, 30)
+float minutesPassed = timeframe.isintraday ? math.max(1, (time - tOpen) / 60000) : 390
+
+// Pace / RVOL Calculation
+var float dayCumVol = 0.0
+if not na(ta.change(time("D")))
+    dayCumVol := volume
+else
+    dayCumVol += volume
+
+float dollarVol = dDollarVolRaw / 1000000 
+float dAvgVol_Safe = math.max(1, dAvgVol)
+float paceMultiplier = timeframe.isintraday ? math.min(1.0, minutesPassed / 390.0) : 1.0
+float paceVol = dAvgVol_Safe * paceMultiplier
+float rvol = timeframe.isintraday ? (dayCumVol / math.max(1, paceVol)) : (volume / dAvgVol_Safe)
+
+// Status Variables
+bool isLeading = dClose > dE9 and dE9 > dE21 and dE21 > dE50
+bool isInsideDay = dPrevHigh > dHigh and dPrevLow < dLow 
+float adrPct = (dADR / dClose) * 100
+
+//---------------------------------------------------------------------------------------------------------------------}
+// 3. CORE ORB ENGINE & PARABOLIC RISK LOGIC (RESTORED)
+//---------------------------------------------------------------------------------------------------------------------{
+var float orh = na, var float orl = na, var float lod = na
+var float prev_orm = na
+var float autoEntry = na, var float autoSL = na
+session_time = crMode == "Presets" ? crSeshPreset : crSeshManual
+or_sesh = not na(time(timeframe.period, session_time, tz))
+or_start = or_sesh and not or_sesh[1]
+
+if or_start
+    if not na(orh) and not na(orl)
+        prev_orm := math.avg(orh, orl)
+    orh := high, orl := low, lod := low, autoEntry := na, autoSL := na
+
+if or_sesh
+    orh := math.max(orh, high), orl := math.min(orl, low), lod := math.min(lod, low)
+
+bool activeTrade = not na(autoEntry)
+
+if not activeTrade and high > orh
+    autoEntry := orh
+    // --- RESTORED PARABOLIC LOGIC (Triggered AT ENTRY) ---
+    // If LOD is > 5% away, snap Stop to Entry Candle Low. Else use LOD.
+    float distToLOD_Entry = ((autoEntry - lod) / autoEntry) * 100
+    if distToLOD_Entry > maxRiskPct
+        autoSL := low // Snap to current 5m entry candle low
+    else
+        autoSL := lod
+
+// Dynamic Exit Strategy
+float activeTrailingStop = na
+if marketState == "Equity Highs"
+    activeTrailingStop := dE21 // Trail the 21 EMA for home runs
+else
+    activeTrailingStop := dE9  // Tight leash when in drawdown
+    
+//---------------------------------------------------------------------------------------------------------------------}
+// 4. MASTER LUK INSTITUTIONAL RISK & POSITION SIZING ENGINE
+//---------------------------------------------------------------------------------------------------------------------{
+// 1. Fetch Multi-Timeframe Data
+[monActive, monClose, monEntry, monSL, monLow5m, monE9] = request.security(syminfo.tickerid, monitorTF, [activeTrade, close, autoEntry, autoSL, low, ta.ema(close, 9)], gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_on)
+[checkClose, checkE9] = request.security(syminfo.tickerid, trendCheckTF, [close, ta.ema(close, 9)], gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_on)
+
+// 2. UNIFIED VARIABLES (THE PERSISTENCE BRIDGE)
+bool isHTF = timeframe.isdaily or timeframe.isweekly
+bool isPlannerMode = manEntryInput > 0
+
+// --- THESE ARE THE THREE KEY BRIDGE LINES YOU ASKED FOR ---
+float reportEntry = isPlannerMode ? manEntryInput : (isHTF ? (na(monEntry) ? dHigh : monEntry) : (activeTrade ? autoEntry : orh))
+float rawSL       = isPlannerMode ? (manStopInput > 0 ? manStopInput : dLow) : (isHTF ? (na(monSL) ? dLow : monSL) : (activeTrade ? autoSL : lod))
+float reportClose = isHTF ? monClose : close
+
+// 3. PLANNER OVERRIDE LOGIC (Ensures Manual Inputs work)
+if isPlannerMode
+    float planDist = ((manEntryInput - dLow) / manEntryInput) * 100
+    // If you didn't provide a manual stop, it uses the Daily Low
+    // If that Daily Low is > Max Risk, it caps it at the hard percentage limit
+    float autoPlanSL = planDist > maxRiskPct ? (manEntryInput * (1 - maxRiskPct/100)) : dLow
+    rawSL := (manStopInput > 0) ? manStopInput : autoPlanSL
+
+// 4. LUK DYNAMIC STOP SNAP (VOLATILITY ADJUSTMENT)
+float currentADRPct = (dADR / dClose) * 100
+float halfADR       = currentADRPct * 0.5
+float maxLukStopPct = math.min(5.0, halfADR) // Luk's Rule: Max 5% or 0.5 ADR
+
+float reportSL = rawSL
+
+// LOGIC FIX: Only force the "Snap to 5m Low" if we are PLANNING. 
+// If the trade is ACTIVE, we trust 'rawSL' because it was already locked at the entry moment.
+if isPlannerMode
+    // Check if the Daily Low is too wide
+    if ((reportEntry - rawSL) / reportEntry * 100) > maxLukStopPct
+        // In Planner Mode, we use current 5m Low as a proxy for "Tight Stop"
+        reportSL := isHTF ? monLow5m : low
+
+// 5. MATH MODULE (Using the finalized, snapped reportSL)
+float lukRiskAmt   = math.abs(reportEntry - reportSL)
+float tradeRiskPct = (reportEntry > 0) ? (lukRiskAmt / reportEntry) * 100 : 0.0
+float currentR     = (lukRiskAmt > 0.0001) ? (reportClose - reportEntry) / lukRiskAmt : 0.0
+
+// 6. LUK CONCENTRATION & ALLOCATION
+// A. Determine Hard Cap based on Asset Class
+float maxAllocPct = 30.0 // Default for Standard
+if lukTier == "Speculative (Small Cap)"
+    maxAllocPct := 20.0 // Cap at 20% for gap protection (Small Caps)
+else if lukTier == "Slow Mover (ETF/Metal)"
+    maxAllocPct := 40.0 // Allow >35% for low volatility instruments
+
+// B. Determine Risk Intent (Drawdown Rule)
+// If Equity Highs = 0.5% (or whatever is set). If Drawdown = Half of that.
+float currentRiskIntent = (marketState == "Equity Highs") ? riskPerTrade : (riskPerTrade * 0.5)
+
+// C. The "Core Formula" (Risk-Based Sizing)
+// Formula: ($Account * Risk%) / StopLoss%
+float sizingByRisk = (tradeRiskPct > 0) ? (accountSize * (currentRiskIntent / 100)) / (tradeRiskPct / 100) : 0
+
+// D. The Hard Cap Check
+float sizingByCap  = accountSize * (maxAllocPct / 100)
+
+// E. Final Position Size (Whichever is smaller)
+float finalPositionSize = math.min(sizingByRisk, sizingByCap)
+
+// F. Output Calculations
+float shareSize       = (reportEntry > 0) ? math.floor(finalPositionSize / reportEntry) : 0
+float currentAllocPct = (finalPositionSize / accountSize) * 100
+
+//---------------------------------------------------------------------------------------------------------------------}
+// 7. INSTITUTIONAL VALIDITY & TREND SYNC (FINALIZED "GO" LOGIC)
+//---------------------------------------------------------------------------------------------------------------------{
+// 1. Speed Check (ADR)
+// Luk Rule: Must have the power to move. Lowered to 2.5% to catch large caps like NVDA.
+bool valid_Speed = currentADRPct >= 2.5 
+
+// 2. Risk Check (Tightness)
+// Luk/Qullamaggie Rule: "Tight Areas". Stop loss must be < 5%.
+bool valid_Risk  = tradeRiskPct <= 5.0  
+
+// 3. Context Check (Market Breadth + SOS Safety)
+// Luk Rule: "Wind at your back". Market must not be in Chaos/Bear.
+bool valid_Context = leaderCount >= 12 and (mktState == "IDX: SUPER TREND" or mktState == "IDX: TRANSITION")
+
+// 4. Structure Check (The Missing Piece)
+// Luk Rule: "Trade Leaders". Stock must be in a stacked uptrend (Price > 9 > 21 > 50).
+// This prevents trading junk stocks just because they are tight.
+bool valid_Structure = isLeading 
+
+// --- THE FINAL "GO" SIGNAL ---
+// All 4 lights must be green.
+bool luk_Setup   = valid_Speed and valid_Risk and valid_Context and valid_Structure
+
+bool trendSync   = (monClose > monE9) and (checkClose > checkE9)
+color dashHeaderCol = trendSync ? color.new(color.aqua, 20) : (dashTheme == "Dark" ? color.new(color.black, 20) : color.new(color.white, 20))
+// 8. STATUS LOGIC (Visual Feedback)
+bool pullTo9 = isLeading and low <= dE9 and close > dE9 
+bool monPullTo9 = not na(monE9) and low <= monE9 and close > monE9
+string combinedStatus = ""
+color statusCol = color.gray
+
+if isPlannerMode
+    combinedStatus := "PLANNER: " + str.tostring(manEntryInput, format.mintick)
+    statusCol := color.blue
+else
+    if (activeTrade or (isHTF and not na(monEntry)))
+        combinedStatus := "ACTIVE @ " + str.tostring(reportEntry, format.mintick)
+        statusCol := color.green
+    else
+        if isHTF
+            combinedStatus := monitorTF + "m: " + str.tostring(monClose, format.mintick)
+            statusCol := monPullTo9 ? color.yellow : color.gray
+        else
+            combinedStatus := pullTo9 ? "9 EMA PULL" : "WAIT"
+            statusCol := pullTo9 ? color.yellow : color.gray
+
+// Anchors for Dashboard Styling
+string lukStopType = (reportSL != rawSL) ? "5m CANDLE" : "LOD"
+string trailAnchor = (equityHighs) ? "21 EMA" : "9 EMA"
+color trailCol     = (equityHighs) ? color.yellow : color.blue
+color rColor       = currentR >= 3.0 ? color.green : currentR < 1.0 ? color.red : color.orange
+
+//---------------------------------------------------------------------------------------------------------------------}
+// 5. PLOTTING & DRAWING
+//---------------------------------------------------------------------------------------------------------------------{
+plot(ema9On  ? dE9 : na, "MA 2 (9 EMA)", color=ma2Col, linewidth=2)
+plot(ema21On ? dE21 : na, "MA 3 (21 EMA)", color=ma3Col, linewidth=2)
+plot(ema50On ? dE50 : na, "MA 4 (50 EMA)", color=ma4Col, linewidth=2)
+
+var box orbBox = na
+bool showVisuals = timeframe.isintraday and timeframe.multiplier <= 60
+
+if or_start and showVisuals
+    orbBox := box.new(bar_index, orh, bar_index, orl, bgcolor=orFillColor, border_width=1, border_color=orColor)
+
+if or_sesh and not na(orbBox)
+    box.set_right(orbBox, bar_index)
+    box.set_top(orbBox, orh)
+    box.set_bottom(orbBox, orl)
+    curr_orm = math.avg(orh, orl)
+    if not na(prev_orm)
+        box.set_bgcolor(orbBox, curr_orm >= prev_orm ? bullFill : bearFill)
+
+// ORH/ORL Labels & Lines
+var line orhL = na, var line orlL = na
+var label orhLab = na, var label orlLab = na
+if or_start and showVisuals
+    line.delete(orhL), line.delete(orlL)
+    label.delete(orhLab), label.delete(orlLab)
+    orhL := line.new(bar_index, orh, bar_index + 10, orh, color=orColor, width=2)
+    orlL := line.new(bar_index, orl, bar_index + 10, orl, color=orColor, width=2)
+    orhLab := label.new(bar_index, orh, "ORH: " + str.tostring(orh, format.mintick), style=label.style_label_left, color=color.rgb(0,0,0,100), textcolor=orColor, size=get_size(labelSizeInput))
+    orlLab := label.new(bar_index, orl, "ORL: " + str.tostring(orl, format.mintick), style=label.style_label_left, color=color.rgb(0,0,0,100), textcolor=orColor, size=get_size(labelSizeInput))
+
+if not na(orhL)
+    line.set_x2(orhL, bar_index), line.set_y1(orhL, orh), line.set_y2(orhL, orh)
+    line.set_x2(orlL, bar_index), line.set_y1(orlL, orl), line.set_y2(orlL, orl)
+    label.set_x(orhLab, bar_index), label.set_y(orhLab, orh)
+    label.set_x(orlLab, bar_index), label.set_y(orlLab, orl)
+
+// PDH and Signals
+plot(dPrevHigh, "PDH Line", color=color.new(color.gray, 50), style=plot.style_circles)
+
+var label pdhLab = na
+if barstate.islast and showVisuals
+    label.delete(pdhLab)
+    pdhLab := label.new(bar_index, dPrevHigh, "PDH: " + str.tostring(dPrevHigh, format.mintick), style=label.style_label_left, color=color.rgb(0,0,0,100), textcolor=color.gray, size=get_size(labelSizeInput))
+    
+// --- FIXED ALERTS (Resolving 'const string' Error) ---
+alertcondition(trendSync and not trendSync[1], title="LUK Trend Sync: AQUA", message="Trend Sync Achieved: Alignment found on both monitored timeframes.")
+
+// Triangle Visual
+bool lukSignalSync = (isHTF ? monActive : activeTrade) and not (isHTF ? monActive[1] : activeTrade[1]) and trendSync and luk_Setup and leaderCount >= 7
+
+plotshape(lukSignalSync, title="LUK Signal", style=shape.triangleup, location=location.belowbar, color=color.new(color.green, 0), size=size.small, text="LUK BUY", textcolor=color.green)
+
+// --- TARGET PROFIT MODULE ---
+var targetLine[] tpLines = array.new<targetLine>()
+if barstate.islast
+    if array.size(tpLines) > 0
+        for i = 0 to array.size(tpLines) - 1
+            tl = array.get(tpLines, i)
+            line.delete(tl.ln)
+            label.delete(tl.lb)
+        array.clear(tpLines)
+
+f_handleTP(_on, _rMult, _curR, _ePrice, _rAmt, _dispType, _showLab, _lSize, _targetArray) =>
+    if _on and not na(_ePrice) and not na(_rAmt)
+        _val = _ePrice + (_rAmt * _rMult)
+        _pct = ((_val - _ePrice) / _ePrice) * 100
+        _shouldShow = _dispType == "Extended" or (_curR >= (_rMult - 3.5) and _curR < _rMult + 0.5)
+        if _shouldShow and barstate.islast
+            ln = line.new(bar_index - 10, _val, bar_index, _val, color=color.new(color.green, 50), style=line.style_dashed)
+            label lb = na 
+            if _showLab
+                _txt = str.tostring(_rMult, "#.#") + "R (" + str.tostring(_pct, "#.#") + "%)"
+                lb := label.new(bar_index, _val, _txt, style=label.style_label_left, color=color.rgb(0,0,0,100), textcolor=color.green, size=get_size(_lSize))
+            array.push(_targetArray, targetLine.new(ln, lb))
+
+if (activeTrade or (isHTF and not na(monEntry)) or isPlannerMode)
+    // Use 'reportClose' here to keep the R-Multiple frozen correctly after market hours
+    float finalCurrentR = (reportClose - reportEntry) / math.max(0.00001, lukRiskAmt)
+    
+    f_handleTP(tp1_on, tp1_v, finalCurrentR, reportEntry, lukRiskAmt, tDispType, showTPLabels, labelSizeInput, tpLines)
+    f_handleTP(tp2_on, tp2_v, finalCurrentR, reportEntry, lukRiskAmt, tDispType, showTPLabels, labelSizeInput, tpLines)
+    f_handleTP(tp3_on, tp3_v, finalCurrentR, reportEntry, lukRiskAmt, tDispType, showTPLabels, labelSizeInput, tpLines)
+    f_handleTP(tp5_on, tp5_v, finalCurrentR, reportEntry, lukRiskAmt, tDispType, showTPLabels, labelSizeInput, tpLines)
+    f_handleTP(tp8_on, tp8_v, finalCurrentR, reportEntry, lukRiskAmt, tDispType, showTPLabels, labelSizeInput, tpLines)
+    
+//---------------------------------------------------------------------------------------------------------------------}
+// 6. DASHBOARD
+//---------------------------------------------------------------------------------------------------------------------{
+if showDash and barstate.islast
+    pos = switch dashPos
+        "Top Left"      => position.top_left
+        "Top Right"     => position.top_right
+        "Bottom Left"   => position.bottom_left
+        "Bottom Right"  => position.bottom_right
+        "Top Center"    => position.top_center
+        "Bottom Center" => position.bottom_center
+        "Middle Left"   => position.middle_left
+        "Middle Right"  => position.middle_right
+        => position.top_right
+    
+    // Increased table size (15 rows)
+    dashTable = table.new(pos, dashOrient=="Vertical"?2:17, dashOrient=="Vertical"?17:2, bgcolor=dashHeaderCol, border_width=1)
+    dSize = get_size(txtSizeInput)
+
+    f_cell(dashTable, dashOrient, 0, "Market Context", mktState, color.white, mktColor, dashTheme, dSize)
+    f_cell(dashTable, dashOrient, 1, "Action Plan", actionText, color.white, actionColor, dashTheme, dSize)
+    f_cell(dashTable, dashOrient, 2, "Trend State", isLeading ? "LEADING" : "MEDIOCRE", color.white, isLeading ? color.green : color.red, dashTheme, dSize)
+    f_cell(dashTable, dashOrient, 3, "Sector Breadth", str.tostring(leaderCount) + "/18", color.white, leaderCount >= 12 ? color.green : leaderCount >= 6 ? color.orange : color.red, dashTheme, dSize)
+    f_cell(dashTable, dashOrient, 4, "Entry Status", combinedStatus, color.white, statusCol, dashTheme, dSize)
+    f_cell(dashTable, dashOrient, 5, "Inside Day", isInsideDay ? "YES" : "NO", isInsideDay ? color.black : color.white, isInsideDay ? color.yellow : color.gray, dashTheme, dSize)
+    f_cell(dashTable, dashOrient, 6, "Setup Quality", luk_Setup ? "GO" : "NO GO", luk_Setup ? color.black : color.white, luk_Setup ? color.green : color.red, dashTheme, dSize)
+    f_cell(dashTable, dashOrient, 7, "ADR % (Speed)", str.tostring(adrPct, "#.#") + "%", color.white, valid_Speed ? color.green : color.gray, dashTheme, dSize)
+    f_cell(dashTable, dashOrient, 8, "Vol Stop", str.tostring(reportSL, format.mintick), color.white, color.gray, dashTheme, dSize)    
+    f_cell(dashTable, dashOrient, 9, "Dollar Vol", str.tostring(dollarVol, "#") + "M", color.white, dollarVol > minDollarVol ? color.green : color.orange, dashTheme, dSize)
+    // Row 10: Dynamic Warning for Trade Risk %
+    color riskWarningCol = tradeRiskPct > maxRiskPct ? color.new(color.red, 20) : color.gray
+    f_cell(dashTable, dashOrient, 10, "Trade Risk %", str.tostring(tradeRiskPct, "#.##") + "%", color.white, riskWarningCol, dashTheme, dSize)
+
+    // Row 11: Turns Fuchsia at 3R to signal Luk's "Sell into Strength" rule
+    color rMultipleBg = currentR >= 3.0 ? color.new(color.fuchsia, 30) : rColor
+    f_cell(dashTable, dashOrient, 11, "Est. R-Multiple", str.tostring(currentR, "#.##") + " R", color.white, rMultipleBg, dashTheme, dSize)
+
+    // Rows 12-15: Final Execution & Context
+    f_cell(dashTable, dashOrient, 12, "Risk Validity", valid_Risk ? "VALID" : "HIGH RISK", color.white, valid_Risk ? color.green : color.red, dashTheme, dSize)
+    // Row 13: LUK ALLOC % (Example: 3.5K (35%))
+    string allocText = str.tostring(finalPositionSize / 1000, "#.#") + "K (" + str.tostring(currentAllocPct, "#") + "%)"
+    f_cell(dashTable, dashOrient, 13, "LUK ALLOC %", allocText, color.white, color.blue, dashTheme, dSize)
+
+    // Row 14: Share Count (Example: 526)
+    f_cell(dashTable, dashOrient, 14, "Share Count", str.tostring(shareSize, "#"), color.white, color.blue, dashTheme, dSize)
+
+    // Row 15: Stop Type (LOD vs 5m)
+    f_cell(dashTable, dashOrient, 15, "Stop Type", lukStopType, color.white, color.gray, dashTheme, dSize)
+
+    // Row 16: Trail Anchor (EMA 9 vs 21)
+    f_cell(dashTable, dashOrient, 16, "Trail Anchor", trailAnchor, color.white, trailCol, dashTheme, dSize)
+
+//---------------------------------------------------------------------------------------------------------------------}
+// 7. INSTITUTIONAL ALERTS (FIXED CONST STRING)
+//---------------------------------------------------------------------------------------------------------------------{
+// 1. Alert for Trend Alignment (When Header turns Aqua)
+alertcondition(trendSync and not trendSync[1], title="LUK Trend Sync: AQUA", message="LUK Trend Sync: Aqua Header Active.")
+
+// 2. High-Conviction "Luk" Entry
+// Note: We use the global 'lukSignalSync' variable defined in Section 5
+alertcondition(lukSignalSync, title="LUK High Conviction Entry", message="LUK BREAKOUT: Entry signal triggered with full breadth and trend alignment!")
+
+// 3. Profit Target Alert (3.0R)
+alertcondition(currentR >= 3.0 and currentR[1] < 3.0, title="LUK 3R Target Hit", message="LUK Target Hit: 3.0R reached.")
+
+// 4. STOP LOSS HIT ALERT
+// To avoid the 'Series String' error, we use a static message. 
+// You can use {{ticker}} and {{close}} in the message box when you actually create the alert in the UI.
+bool stopHit = (isHTF ? monActive : activeTrade) and low <= reportSL
+alertcondition(stopHit and not stopHit[1], title="LUK STOP LOSS HIT", message="LUK EXIT: Price has crossed the Vol Stop.")
